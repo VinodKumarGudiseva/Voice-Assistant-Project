@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 400px; text-align: center; }
+        #chat { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        #start { background: #4CAF50; color: white; }
+        #stop { background: #f44336; color: white; }
+        #text-input { width: 80%; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice Assistant</h1>
+        <div id="chat"></div>
+        <input type="text" id="text-input" placeholder="Type a command...">
+        <button id="start">Start Listening</button>
+        <button id="stop">Stop</button>
+        <p>Say "Stark" to wake me up!</p>
+    </div>
+
+    <script>
+        const chat = document.getElementById('chat');
+        const startBtn = document.getElementById('start');
+        const stopBtn = document.getElementById('stop');
+        const textInput = document.getElementById('text-input');
+        
+        let recognition;
+        let isListening = false;
+        let wakeWordDetected = false;
+
+        // Initialize Speech Recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+                appendMessage('You: ' + transcript);
+                
+                if (!wakeWordDetected && transcript.includes('stark')) {
+                    wakeWordDetected = true;
+                    appendMessage('Assistant: Wake word detected. Listening for commands...');
+                    speak('Wake word detected. Listening for commands.');
+                } else if (wakeWordDetected) {
+                    sendQuery(transcript);
+                    wakeWordDetected = false;  // Reset after command
+                }
+            };
+
+            recognition.onend = () => {
+                if (isListening) recognition.start();
+            };
+        } else {
+            alert('Speech recognition not supported in this browser.');
+        }
+
+        // Speech Synthesis
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Append to chat
+        function appendMessage(msg) {
+            chat.innerHTML += '<p>' + msg + '</p>';
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // Send query to backend
+        async function sendQuery(query) {
+            try {
+                const response = await fetch('http://localhost:5000/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await response.json();
+                appendMessage('Assistant: ' + data.response);
+                speak(data.response);
+            } catch (error) {
+                appendMessage('Error: Could not connect to backend.');
+            }
+        }
+
+        // Button events
+        startBtn.addEventListener('click', () => {
+            if (recognition && !isListening) {
+                isListening = true;
+                recognition.start();
+                appendMessage('Assistant: Listening... Say "Stark" to start.');
+                speak('Listening. Say Stark to start.');
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            isListening = false;
+            if (recognition) recognition.stop();
+            appendMessage('Assistant: Stopped.');
+            speak('Stopped.');
+        });
+
+        // Text input fallback
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendQuery(textInput.value);
+                textInput.value = '';
+            }
+        });
+    </script>
+</body>
+</html>
